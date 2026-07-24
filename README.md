@@ -111,9 +111,7 @@
 ```text
 skala4_nbax/
 ├── src/
-│   ├── nbax_agents.py       # 공통 설정·Agent 1·Agent 4·전체 실행 흐름
-│   ├── nbax_agent2.py       # Agent 2 요리 생성 프롬프트와 Task
-│   ├── nbax_agent3.py       # Agent 3 DDGS 검색과 교차검증 Task
+│   ├── nbax_agents.py       # Agent 1~4 구현 (Agent 2·3은 구분선으로 분리)
 │   ├── nbax_server.py       # 라이브 웹서버
 │   └── nbax_run.py          # 배치 생성 CLI
 ├── web/
