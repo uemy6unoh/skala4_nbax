@@ -6,6 +6,7 @@
 #   python src/nbax_run.py                       # 기본: 한식 + 장보기 2경로
 #   python src/nbax_run.py --cuisine 중식 양식     # 원하는 요리만
 #   python src/nbax_run.py --all                  # 한식/중식/양식/일식 전부
+#   python src/nbax_run.py --retailer kurly       # 컬리 장보기 링크 생성
 #   python src/nbax_run.py --no-shopping          # 장보기 생략 (비용 절약)
 #
 # 파이프라인 (A는 1회만 계산해 재사용 -> 토큰 비용 절약):
@@ -34,6 +35,9 @@ def main():
                         choices=["한식", "중식", "양식", "일식"],
                         help="레시피를 생성할 요리 타입 (복수 선택 가능)")
     parser.add_argument("--all", action="store_true", help="4가지 요리 전부 생성")
+    parser.add_argument("--retailer", nargs="+", default=["coupang"],
+                        choices=["coupang", "kurly"],
+                        help="장보기 플랫폼 (복수 선택 가능)")
     parser.add_argument("--no-shopping", action="store_true", help="장보기 단계 생략")
     parser.add_argument("--no-open", action="store_true", help="브라우저 자동 열기 생략")
     args = parser.parse_args()
@@ -41,8 +45,10 @@ def main():
     import nbax_agents as agents  # .env 검증이 import 시점에 수행됨
 
     cuisines = agents.CUISINES if args.all else list(dict.fromkeys(args.cuisine))
+    retailers = list(dict.fromkeys(args.retailer))
 
-    total = 1 + len(cuisines) + (0 if args.no_shopping else 1 + len(cuisines))
+    shopping_steps = len(retailers) * (1 + len(cuisines))
+    total = 1 + len(cuisines) + (0 if args.no_shopping else shopping_steps)
     step = 0
 
     def log(msg):
@@ -63,16 +69,20 @@ def main():
     # ---- Agent 4: 장보기 관리사 ----
     shopping = {}
     if not args.no_shopping:
-        log("Agent 4 · 장보기 관리사 → 바로 장보기 (현 재고 보충)")
-        shopping["direct"] = agents.run_shopping("direct", fridge_report)
-        for c in cuisines:
-            if recipes[c].strip().startswith(agents.NO_RECIPE):
-                print(f"({c}: 적합한 레시피가 없어 요리 후 장보기 생략)")
-                continue
-            log(f"Agent 4 · 장보기 관리사 → 요리 후 장보기 (소진 재료 보충·{c})")
-            shopping[f"recipe:{c}"] = agents.run_shopping(
-                "recipe", fridge_report, recipes[c]
+        for retailer in retailers:
+            label = agents.RETAILERS[retailer]["label"]
+            log(f"Agent 4 · 장보기 관리사 → 바로 장보기 ({label} · 현 재고 보충)")
+            shopping[f"direct:{retailer}"] = agents.run_shopping(
+                "direct", fridge_report, retailer=retailer
             )
+            for c in cuisines:
+                if recipes[c].strip().startswith(agents.NO_RECIPE):
+                    print(f"({c}: 적합한 레시피가 없어 요리 후 장보기 생략)")
+                    continue
+                log(f"Agent 4 · 장보기 관리사 → 요리 후 장보기 ({label} · 소진 재료 보충·{c})")
+                shopping[f"recipe:{c}:{retailer}"] = agents.run_shopping(
+                    "recipe", fridge_report, recipes[c], retailer=retailer
+                )
 
     # ---- 결과 데이터 저장 (기존 nbax_data.js가 있으면 요리별 결과는 병합) ----
     old = _load_old_data(agents.PIPELINE_VERSION)

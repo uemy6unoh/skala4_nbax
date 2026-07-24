@@ -16,6 +16,7 @@ import csv
 import warnings
 from datetime import date
 from pathlib import Path
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 
@@ -64,8 +65,18 @@ llm = LLM(
 )
 
 CUISINES = ["한식", "중식", "양식", "일식"]
+RETAILERS = {
+    "coupang": {
+        "label": "쿠팡",
+        "search_url": "https://www.coupang.com/np/search?q={query}",
+    },
+    "kurly": {
+        "label": "컬리",
+        "search_url": "https://www.kurly.com/search?sword={query}",
+    },
+}
 NO_RECIPE = "적합한 레시피 없음"  # 요리사가 검증 통과 후보가 없을 때 첫 줄에 쓰는 고정 문구
-PIPELINE_VERSION = "agent-context-v7"
+PIPELINE_VERSION = "agent-context-v8"
 
 CUISINE_IDENTITY = {
     "한식": "찌개, 전골, 제육, 불고기, 전, 비빔밥",
@@ -109,6 +120,38 @@ def imminent_ingredients() -> list[str]:
         for row in rows
         if 0 <= (date.fromisoformat(row["유통기한"].strip()) - today).days <= 5
     ]
+
+
+def normalize_direct_shopping_quantities(markdown: str) -> str:
+    """바로 장보기의 현재 수량을 CSV 원본으로 교정한다.
+
+    LLM이 임박 재료를 이미 소진된 것으로 오해해 0으로 쓰더라도, 요리 전인
+    direct 경로에서는 실제 냉장고 수량과 폐기 여부가 화면에 표시되어야 한다.
+    """
+    with open(CSV_PATH, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    today = date.today()
+    inventory = {}
+    for row in rows:
+        name = row["재료명"].strip()
+        amount = f"{row['수량'].strip()}{row['단위'].strip()}"
+        expired = date.fromisoformat(row["유통기한"].strip()) < today
+        inventory[name] = amount + (" · 폐기 대상" if expired else "")
+
+    pattern = re.compile(
+        r"(?P<prefix>-\s*\[(?P<name>[^\]]+)\]\(https?://[^)\s]+\)\s*)"
+        r"\(현재(?:\s*재고)?\s*[:：]\s*[^)]*\)"
+    )
+
+    def replace_current(match: re.Match) -> str:
+        name = match.group("name").strip()
+        current = inventory.get(name)
+        if current is None:
+            return match.group(0)
+        return f"{match.group('prefix')}(현재: {current})"
+
+    return pattern.sub(replace_current, markdown)
 
 
 def _run_single(agent: Agent, task: Task) -> str:
@@ -313,6 +356,7 @@ def run_shopping(
     mode: str,
     fridge_report: str,
     recipe: str | None = None,
+    retailer: str = "coupang",
 ) -> str:
     """Agent 1의 A와 선택적으로 Agent 2의 B를 컨텍스트로 받아 Agent 4가 장보기를 생성한다.
 
@@ -321,6 +365,8 @@ def run_shopping(
     """
     if mode not in ("direct", "recipe"):
         raise ValueError('mode는 "direct" 또는 "recipe"여야 합니다.')
+    if retailer not in RETAILERS:
+        raise ValueError(f"retailer는 {list(RETAILERS)} 중 하나여야 합니다.")
     if not fridge_report or not fridge_report.strip():
         raise ValueError("Agent 1의 냉장고 브리핑(A)이 필요합니다.")
     if mode == "recipe" and not recipe:
@@ -355,7 +401,8 @@ def run_shopping(
     if mode == "direct":
         guide = (
             "현 재고 기준의 보충 장보기입니다. 폐기 대상의 대체품, 곧 없어질 임박 재료, "
-            "수량이 적은 기본 식재료를 보충 대상으로 봅니다."
+            "수량이 적은 기본 식재료를 보충 대상으로 봅니다. 아직 요리하지 않은 상태이므로 "
+            "임박 재료도 소진된 것으로 간주하지 말고 원본 재고의 현재 수량을 그대로 쓰세요."
         )
     else:
         context_tasks.append(
@@ -372,16 +419,19 @@ def run_shopping(
             "'요리 후 냉장고'를 기준으로, 소진·부족해진 재료와 폐기 대상 대체품을 보충 대상으로 봅니다."
         )
 
+    retailer_label = RETAILERS[retailer]["label"]
     task = Task(
         description=(
             context_text +
             "냉장고를 다시 채울 보충 장보기 목록을 작성하세요. " + guide + "\n"
+            f"사용자가 선택한 구매 플랫폼은 '{retailer_label}'입니다. "
+            f"모든 구매 링크는 {retailer_label} 검색 링크만 사용하세요.\n"
             "다음 ReAct 절차로 사고하되, 최종 Answer만 출력하세요.\n"
             "Thought: 무엇이 소진·부족해졌는지 판단한다.\n"
             "Action: 다시 채워야 할 재료만 고른다.\n"
             "Answer: 아래 형식으로 출력한다.\n"
             "1. '## 🧊 냉장고 상태': 2~3줄 요약.\n"
-            "2. '## 🛒 보충 구매 목록': 각 항목을 '- [재료명](https://www.coupang.com/np/search?q=재료명) "
+            f"2. '## 🛒 보충 구매 목록': 각 항목을 '- [재료명]({RETAILERS[retailer]['search_url'].format(query='재료명')}) "
             "(현재: 남은수량+단위)' 형식으로 작성합니다.\n"
             "레시피 경로는 실제 사용량을 뺀 현재 잔량을 쓰고, 소진됐으면 '현재: 0단위', "
             "유통기한이 지났으면 '현재: 수량+단위 · 폐기 대상'으로 표시하세요.\n"
@@ -389,9 +439,25 @@ def run_shopping(
             "URL의 재료명은 공백 없이 작성합니다."
         ),
         expected_output=(
-            "냉장고 상태 요약과 현재 잔량·쿠팡 링크만 담은 보충 구매 목록"
+            f"냉장고 상태 요약과 현재 잔량·{retailer_label} 링크만 담은 보충 구매 목록"
         ),
         agent=agent,
         context=context_tasks,
     )
-    return _run_single(agent, task)
+    output = _run_single(agent, task)
+    output = _normalize_retailer_links(output, retailer)
+    if mode == "direct":
+        output = normalize_direct_shopping_quantities(output)
+    return output
+
+
+def _normalize_retailer_links(markdown: str, retailer: str) -> str:
+    """LLM이 만든 URL을 신뢰하지 않고 선택 플랫폼의 검색 URL로 강제 변환한다."""
+    template = RETAILERS[retailer]["search_url"]
+
+    def replace_link(match: re.Match) -> str:
+        name = match.group(1).strip()
+        query = quote(name.replace(" ", ""))
+        return f"[{name}]({template.format(query=query)})"
+
+    return re.sub(r"\[([^\]]+)\]\(https?://[^)\s]+\)", replace_link, markdown)

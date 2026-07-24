@@ -37,6 +37,14 @@ STATIC_FILES = {
     "/nbax_app.js": (WEB_DIR / "nbax_app.js", "text/javascript; charset=utf-8"),
     "/nbax_data.js": (DATA_JS, "text/javascript; charset=utf-8"),
     "/nbax_logo.png": (WEB_DIR / "nbax_logo.png", "image/png"),
+    "/assets/retailers/coupang-logo.png": (
+        WEB_DIR / "assets" / "retailers" / "coupang-logo.png",
+        "image/png",
+    ),
+    "/assets/retailers/kurly-logo.png": (
+        WEB_DIR / "assets" / "retailers" / "kurly-logo.png",
+        "image/png",
+    ),
     "/nbax_fridge.csv": (agents.CSV_PATH, "text/csv; charset=utf-8"),
 }
 
@@ -123,25 +131,43 @@ def _recipe(cuisine: str) -> tuple[str, bool]:
     return _state["recipes"][cuisine], cached
 
 
-def _shopping(mode: str, cuisine: str | None) -> tuple[str, bool]:
-    key = "direct" if mode == "direct" else f"recipe:{cuisine}"
+def _shopping(mode: str, cuisine: str | None, retailer: str) -> tuple[str, bool]:
+    key = (
+        f"direct:{retailer}"
+        if mode == "direct"
+        else f"recipe:{cuisine}:{retailer}"
+    )
     cached = key in _state["shopping"]
     if not cached:
         fridge_report = _fridge()
+        retailer_label = agents.RETAILERS[retailer]["label"]
         if mode == "direct":
-            print("\n[agent] Agent 4 · 장보기 관리사 실행 → 바로 장보기 (현 재고 보충)")
+            print(
+                f"\n[agent] Agent 4 · 장보기 관리사 실행 → "
+                f"바로 장보기 ({retailer_label} · 현 재고 보충)"
+            )
             _state["shopping"][key] = agents.run_shopping(
-                "direct", fridge_report
+                "direct", fridge_report, retailer=retailer
             )
         else:
             b, _ = _recipe(cuisine)
             if b.strip().startswith(agents.NO_RECIPE):
                 raise ValueError(f"{cuisine} 레시피가 없어 요리 후 장보기를 만들 수 없습니다.")
-            print(f"\n[agent] Agent 4 · 장보기 관리사 실행 → 요리 후 장보기 (소진 재료 보충·{cuisine})")
+            print(
+                f"\n[agent] Agent 4 · 장보기 관리사 실행 → "
+                f"요리 후 장보기 ({retailer_label} · 소진 재료 보충·{cuisine})"
+            )
             _state["shopping"][key] = agents.run_shopping(
-                "recipe", fridge_report, b
+                "recipe", fridge_report, b, retailer=retailer
             )
         _save()
+    if mode == "direct":
+        corrected = agents.normalize_direct_shopping_quantities(
+            _state["shopping"][key]
+        )
+        if corrected != _state["shopping"][key]:
+            _state["shopping"][key] = corrected
+            _save()
     return _state["shopping"][key], cached
 
 
@@ -194,12 +220,17 @@ class Handler(BaseHTTPRequestHandler):
                 elif self.path == "/api/shopping":
                     mode = payload.get("mode", "")
                     cuisine = payload.get("cuisine")
+                    retailer = payload.get("retailer", "")
                     if mode not in ("direct", "recipe"):
                         raise ValueError('mode는 "direct" 또는 "recipe"여야 합니다.')
                     if mode == "recipe" and cuisine not in agents.CUISINES:
                         raise ValueError(f"cuisine은 {agents.CUISINES} 중 하나여야 합니다.")
-                    s, cached = _shopping(mode, cuisine)
-                    self._json({"mode": mode, "cuisine": cuisine,
+                    if retailer not in agents.RETAILERS:
+                        raise ValueError(
+                            f"retailer는 {list(agents.RETAILERS)} 중 하나여야 합니다."
+                        )
+                    s, cached = _shopping(mode, cuisine, retailer)
+                    self._json({"mode": mode, "cuisine": cuisine, "retailer": retailer,
                                 "shopping": s, "cached": cached})
                 else:
                     self._json({"error": "unknown endpoint"}, 404)
@@ -226,7 +257,7 @@ def main():
     else:
         _load_saved()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    url = f"http://localhost:{PORT}/?v=13"
+    url = f"http://localhost:{PORT}/?v=18"
     print(f"\n냉장고를 부탁해 AX 서버 시작: {url}  (종료: Ctrl+C)")
     threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

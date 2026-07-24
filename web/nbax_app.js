@@ -16,7 +16,11 @@
     "양식": "🍝",
     "일식": "🍣",
   };
-  const PIPELINE_VERSION = "agent-context-v7";
+  const RETAILERS = {
+    "coupang": "쿠팡",
+    "kurly": "컬리",
+  };
+  const PIPELINE_VERSION = "agent-context-v8";
   const $ = (id) => document.getElementById(id);
   const LIVE = location.protocol === "http:" || location.protocol === "https:";
   const HAS_CURRENT_DATA =
@@ -86,7 +90,7 @@
     return html;
   }
 
-  function renderShopping(md) {
+  function renderShopping(md, retailer) {
     const lines = md.split("\n");
     const headingIndex = lines.findIndex(line => /보충 구매 목록/.test(line));
     const summary = headingIndex >= 0 ? lines.slice(0, headingIndex).join("\n") : "";
@@ -109,7 +113,8 @@
       `<div class="shop-item">` +
         `<div class="shop-item-info"><strong>${esc(item.name)}</strong>` +
         `<span>현재 ${esc(item.remaining)}</span></div>` +
-        `<a class="shop-go" href="${esc(item.url)}" target="_blank" rel="noopener">바로가기</a>` +
+        `<a class="shop-go" href="${esc(item.url)}" target="_blank" rel="noopener">` +
+          `${esc(RETAILERS[retailer] || "구매")} 바로가기</a>` +
       `</div>`
     ).join("");
 
@@ -246,6 +251,31 @@
     chips.appendChild(b);
   });
 
+  // ---------- 장보기 플랫폼 선택: 홈과 레시피 화면에서 같은 상태 공유 ----------
+  let selectedRetailer = null;
+  const retailerButtons = [...document.querySelectorAll("[data-retailer]")];
+
+  function pickRetailer(retailer) {
+    if (!RETAILERS[retailer]) return;
+    selectedRetailer = retailer;
+    retailerButtons.forEach(button => {
+      button.classList.toggle("on", button.dataset.retailer === retailer);
+    });
+    updateShoppingButtons();
+  }
+
+  retailerButtons.forEach(button => {
+    button.addEventListener("click", () => pickRetailer(button.dataset.retailer));
+  });
+
+  function updateShoppingButtons() {
+    const required = !selectedRetailer;
+    $("btn-direct").disabled = required;
+    $("btn-shop-recipe").disabled = required;
+  }
+
+  updateShoppingButtons();
+
   // 홈 상단에 오늘 날짜 표시 (냉장고 브리핑의 기준일)
   (function showToday() {
     const d = new Date();
@@ -257,7 +287,7 @@
     renderFridgeInventory(DATA.csv);
   } else if (LIVE) {
     renderFridgeInventory("");
-    fetch("/nbax_fridge.csv?v=13", { cache: "no-store" })
+    fetch("/nbax_fridge.csv?v=18", { cache: "no-store" })
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
@@ -284,13 +314,13 @@
       ? `<div class="empty">현재 재고로는 ${cuisine} 요리를 억지로 만들지 않았어요. ` +
         `홈으로 돌아가 다른 타입을 선택해 보세요.</div>` + renderMd(md)
       : renderMd(md);
-    $("btn-shop-recipe").hidden = none; // 요리를 안 했으니 장보기 버튼 숨김
+    $("recipe-shop-controls").hidden = none; // 요리를 안 했으니 장보기 선택과 버튼 숨김
     go("recipe");
   }
-  function showShopping(title, desc, md) {
+  function showShopping(title, desc, md, retailer) {
     $("shopping-title").innerHTML = `${title} <span class="badge">Agent 4 · ReAct</span>`;
     $("shopping-desc").textContent = desc;
-    $("shopping-body").innerHTML = renderShopping(md);
+    $("shopping-body").innerHTML = renderShopping(md, retailer);
     go("shopping");
   }
 
@@ -319,39 +349,78 @@
   const RECIPE_SHOP_DESC =
     "레시피대로 요리해 재료를 소진한 뒤, 냉장고를 다시 채우는 보충 구매 추천입니다.";
   $("btn-shop-recipe").addEventListener("click", () => {
-    const c = selected, key = "recipe:" + c;
+    if (!selectedRetailer) {
+      alert("장보기 플랫폼을 선택해 주세요.");
+      return;
+    }
+    const c = selected;
+    const retailer = selectedRetailer;
+    const retailerLabel = RETAILERS[retailer];
+    const key = `recipe:${c}:${retailer}`;
     if (!LIVE && !DATA.shopping[key]) {
-      showShopping("🛒 요리 후 장보기 · " + c, "",
+      showShopping(`🛒 요리 후 장보기 · ${c} · ${retailerLabel}`, "",
         `이 레시피의 장보기 결과가 없습니다. nbax_server.py로 실행하거나 ` +
-        `**nbax_run.py --cuisine ${c}** 로 생성하세요.`);
+        `**nbax_run.py --cuisine ${c} --retailer ${retailer}** 로 생성하세요.`,
+        retailer);
       return;
     }
     task(
       "Agent 4 장보기 관리사가 요리 후 남은 재고를 확인하는 중...",
       async () => {
-        const r = await api("/api/shopping", { mode: "recipe", cuisine: c });
+        const r = await api("/api/shopping", {
+          mode: "recipe",
+          cuisine: c,
+          retailer,
+        });
         DATA.shopping[key] = r.shopping;
-        showShopping(`🛒 요리 후 장보기 · ${c}`, RECIPE_SHOP_DESC, r.shopping);
+        showShopping(
+          `🛒 요리 후 장보기 · ${c} · ${retailerLabel}`,
+          RECIPE_SHOP_DESC,
+          r.shopping,
+          retailer,
+        );
       },
-      () => showShopping(`🛒 요리 후 장보기 · ${c}`, RECIPE_SHOP_DESC, DATA.shopping[key]),
+      () => showShopping(
+        `🛒 요리 후 장보기 · ${c} · ${retailerLabel}`,
+        RECIPE_SHOP_DESC,
+        DATA.shopping[key],
+        retailer,
+      ),
     ).catch(e => alert("장보기 생성 실패: " + e.message));
   });
 
   // ---------- 홈 → 바로 장보기 (현 재고 보충) ----------
   const DIRECT_SHOP_DESC = "현 재고 기준으로 부족하거나 곧 없어질 재료를 채우는 보충 구매 추천입니다.";
   $("btn-direct").addEventListener("click", () => {
-    if (!LIVE && !DATA.shopping["direct"]) {
+    if (!selectedRetailer) {
+      alert("장보기 플랫폼을 선택해 주세요.");
+      return;
+    }
+    const retailer = selectedRetailer;
+    const retailerLabel = RETAILERS[retailer];
+    const key = `direct:${retailer}`;
+    if (!LIVE && !DATA.shopping[key]) {
       alert("바로 장보기 결과가 없습니다. nbax_server.py로 실행해 보세요.");
       return;
     }
     task(
       "Agent 4 장보기 관리사가 냉장고 재고를 확인하는 중...",
       async () => {
-        const r = await api("/api/shopping", { mode: "direct" });
-        DATA.shopping["direct"] = r.shopping;
-        showShopping("🛒 바로 장보기", DIRECT_SHOP_DESC, r.shopping);
+        const r = await api("/api/shopping", { mode: "direct", retailer });
+        DATA.shopping[key] = r.shopping;
+        showShopping(
+          `🛒 바로 장보기 · ${retailerLabel}`,
+          DIRECT_SHOP_DESC,
+          r.shopping,
+          retailer,
+        );
       },
-      () => showShopping("🛒 바로 장보기", DIRECT_SHOP_DESC, DATA.shopping["direct"]),
+      () => showShopping(
+        `🛒 바로 장보기 · ${retailerLabel}`,
+        DIRECT_SHOP_DESC,
+        DATA.shopping[key],
+        retailer,
+      ),
     ).catch(e => alert("장보기 생성 실패: " + e.message));
   });
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>냉장고를 부탁해 AX</title>
-<link rel="stylesheet" href="nbax_style.css?v=16">
+<link rel="stylesheet" href="nbax_style.css?v=19">
 </head>
 <body>
 <div class="wrap">
@@ -33,6 +33,16 @@
           <div class="chips" id="cuisine-chips"></div>
           <button class="btn" id="btn-recipe">🍳 레시피 생성</button>
           <p class="or">— 또는 —</p>
+          <div class="retailer-picker" aria-label="장보기 플랫폼 선택">
+            <div class="retailer-chips">
+              <button type="button" data-retailer="coupang" aria-label="쿠팡">
+                <img src="assets/retailers/coupang-logo.png" alt="쿠팡">
+              </button>
+              <button type="button" data-retailer="kurly" aria-label="컬리">
+                <img src="assets/retailers/kurly-logo.png" alt="컬리">
+              </button>
+            </div>
+          </div>
           <button class="btn ghost" id="btn-direct">🛒 바로 장보기 (현 재고 보충)</button>
         </div>
       </div>
@@ -56,7 +66,19 @@
       <h1 id="recipe-title">레시피 <span class="badge">Agent 2 생성 · Agent 3 검증</span></h1>
       <p class="desc">유통기한 임박 재료를 최대한 활용한 레시피입니다.</p>
       <div class="md" id="recipe-body"></div>
-      <button class="btn" id="btn-shop-recipe" style="margin-top:22px">🛒 요리 확정 </button>
+      <div id="recipe-shop-controls">
+        <div class="retailer-picker recipe-retailer-picker" aria-label="장보기 플랫폼 선택">
+          <div class="retailer-chips">
+            <button type="button" data-retailer="coupang" aria-label="쿠팡">
+              <img src="assets/retailers/coupang-logo.png" alt="쿠팡">
+            </button>
+            <button type="button" data-retailer="kurly" aria-label="컬리">
+              <img src="assets/retailers/kurly-logo.png" alt="컬리">
+            </button>
+          </div>
+        </div>
+        <button class="btn" id="btn-shop-recipe">🛒 요리 확정! 장보러 가기</button>
+      </div>
     </div>
   </section>
 
@@ -79,7 +101,7 @@
 <!-- 로딩 오버레이 -->
 <div id="loading"><div class="spinner"></div><p id="loading-msg">불러오는 중...</p></div>
 
-<script src="nbax_data.js?v=13"></script>
-<script src="nbax_app.js?v=13"></script>
+<script src="nbax_data.js?v=18"></script>
+<script src="nbax_app.js?v=18"></script>
 </body>
 </html>
