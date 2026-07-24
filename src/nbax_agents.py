@@ -1,11 +1,12 @@
 # nbax_agents.py
 # 냉장고 관리 CrewAI 에이전트 (practice_2.CrewAI_Agent_System.ipynb 기반)
 # - Agent 1: 냉장고 관리사 -> 브리핑 A (임박 재료 + 요리 타입 추천)
-# - Agent 2: 요리사(한식/중식/양식/일식) -> 레시피 B (SC로 실존·타입·재고 검증)
-# - Agent 2-2: 레시피 교차검증자 -> 레시피가 이름·타입에 걸맞은지 판정 (탈락 시 1회 재시도)
-# - Agent 3: 장보기 관리사 -> 보충 장보기 (요리 후 소진 재료 또는 현 재고 기준, ReAct)
+# - Agent 2: 요리사(한식/중식/양식/일식) -> 레시피 후보 B 생성
+# - Agent 3: 레시피 교차검증자 -> 레시피가 이름·타입에 걸맞은지 판정 (탈락 시 Agent 2가 1회 재시도)
+# - Agent 4: 장보기 관리사 -> 보충 장보기 (요리 후 소진 재료 또는 현 재고 기준, ReAct)
 #
-# 컨텍스트 흐름: Agent 1의 A -> Agent 2의 B -> Agent 3에 A 또는 A+B 전달
+# 컨텍스트 흐름: Agent 1의 A -> Agent 2의 B -> Agent 3이 A+B 검증
+#                -> Agent 4에 A(직접 장보기) 또는 A+B(요리 후 장보기) 전달
 # 비용 절약: A는 1회만 계산해 재사용, D-day는 파이썬 전처리로 주입 (LLM 날짜 계산 금지)
 # 실행: nbax_server.py (라이브) / nbax_run.py (배치)
 
@@ -64,7 +65,7 @@ llm = LLM(
 
 CUISINES = ["한식", "중식", "양식", "일식"]
 NO_RECIPE = "적합한 레시피 없음"  # 요리사가 검증 통과 후보가 없을 때 첫 줄에 쓰는 고정 문구
-PIPELINE_VERSION = "agent-context-v6"
+PIPELINE_VERSION = "agent-context-v7"
 
 CUISINE_IDENTITY = {
     "한식": "찌개, 전골, 제육, 불고기, 전, 비빔밥",
@@ -178,7 +179,7 @@ def run_fridge_report() -> str:
 
 # ------------------------------------------------------------
 # Agent 2: 요리사 -> 레시피 B
-# Agent 2-2: 레시피 교차검증자 -> 레시피 전체(이름·재료·조리법)를 검증
+# Agent 3: 레시피 교차검증자 -> 레시피 전체(이름·재료·조리법)를 검증
 #   생성자는 자기 결과에 관대하므로 생성과 검증을 분리한다.
 #   흐름: 요리사 생성 -> 교차검증 -> 탈락 시 사유 전달 후 1회 재시도 -> 그래도 탈락이면 NO_RECIPE
 # ------------------------------------------------------------
@@ -193,10 +194,11 @@ def run_recipe(cuisine: str, fridge_report: str) -> str:
         recipe = _cook(cuisine, fridge_report, feedback)
         if recipe.strip().startswith(NO_RECIPE):
             return recipe
+        print(f"[Agent 3] {cuisine} 레시피 교차검증 실행")
         ok, reason = _verify_recipe(cuisine, fridge_report, recipe)
         if ok:
             return recipe
-        print(f"[교차검증] 탈락:\n{reason}")
+        print(f"[Agent 3] 교차검증 탈락:\n{reason}")
         feedback = (
             f"직전 레시피 탈락 사유: {reason}\n"
             f"{cuisine}의 맛·양념·조리 특징과 임박 재료 활용을 보강하세요. "
@@ -303,7 +305,7 @@ def _verify_recipe(
 
 
 # ------------------------------------------------------------
-# Agent 3: 장보기 관리사 -> 재고 보충 구매 추천 (ReAct 스타일)
+# Agent 4: 장보기 관리사 -> 재고 보충 구매 추천 (ReAct 스타일)
 #   장보기의 개념: "요리를 만들기 위한" 장보기가 아니라,
 #   재료를 소진한 뒤(또는 현 재고 기준) 냉장고를 "다시 채우는" 보충 장보기
 # ------------------------------------------------------------
@@ -312,7 +314,7 @@ def run_shopping(
     fridge_report: str,
     recipe: str | None = None,
 ) -> str:
-    """Agent 1의 A와 선택적으로 Agent 2의 B를 컨텍스트로 받아 장보기를 생성한다.
+    """Agent 1의 A와 선택적으로 Agent 2의 B를 컨텍스트로 받아 Agent 4가 장보기를 생성한다.
 
     mode="direct": A를 참고한 현 재고 보충
     mode="recipe": A+B를 참고한 요리 후 보충

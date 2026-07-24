@@ -11,7 +11,8 @@
 # 파이프라인 (A는 1회만 계산해 재사용 -> 토큰 비용 절약):
 #   Agent1 냉장고 관리사 -> A
 #   Agent2 요리사(선택된 타입마다) : A -> B
-#   Agent3 장보기 관리사 : A -> 바로 장보기 / A+B -> 레시피 장보기
+#   Agent3 레시피 교차검증자 : A+B -> 통과/보완허용/탈락
+#   Agent4 장보기 관리사 : A -> 바로 장보기 / A+B -> 레시피 장보기
 
 import argparse
 import json
@@ -56,19 +57,19 @@ def main():
     # ---- Agent 2: 요리사 -> 레시피 B ----
     recipes = {}
     for c in cuisines:
-        log(f"Agent 2 · {c} 요리사 → 레시피 (교차검증 포함)")
+        log(f"Agent 2 · {c} 요리사 → Agent 3 · 레시피 교차검증")
         recipes[c] = agents.run_recipe(c, fridge_report)
 
-    # ---- Agent 3: 장보기 관리사 ----
+    # ---- Agent 4: 장보기 관리사 ----
     shopping = {}
     if not args.no_shopping:
-        log("Agent 3 · 장보기 관리사 → 바로 장보기 (현 재고 보충)")
+        log("Agent 4 · 장보기 관리사 → 바로 장보기 (현 재고 보충)")
         shopping["direct"] = agents.run_shopping("direct", fridge_report)
         for c in cuisines:
             if recipes[c].strip().startswith(agents.NO_RECIPE):
                 print(f"({c}: 적합한 레시피가 없어 요리 후 장보기 생략)")
                 continue
-            log(f"Agent 3 · 장보기 관리사 → 요리 후 장보기 (소진 재료 보충·{c})")
+            log(f"Agent 4 · 장보기 관리사 → 요리 후 장보기 (소진 재료 보충·{c})")
             shopping[f"recipe:{c}"] = agents.run_shopping(
                 "recipe", fridge_report, recipes[c]
             )

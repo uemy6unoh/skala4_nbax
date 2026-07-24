@@ -103,7 +103,7 @@ def _reset_cache():
 # ---- 에이전트 실행 (전부 _lock 안에서 호출됨: 동시 실행 방지) ----
 def _fridge() -> str:
     if _state["fridge"] is None:
-        print("\n[agent] 냉장고 관리사 실행 → 냉장고 브리핑")
+        print("\n[agent] Agent 1 · 냉장고 관리사 실행 → 냉장고 브리핑")
         _state["fridge"] = agents.run_fridge_report()
         _save()
     return _state["fridge"]
@@ -113,7 +113,7 @@ def _recipe(cuisine: str) -> tuple[str, bool]:
     cached = cuisine in _state["recipes"]
     if not cached:
         fridge_report = _fridge()
-        print(f"\n[agent] {cuisine} 요리사 실행 → 레시피 (교차검증 포함)")
+        print(f"\n[agent] Agent 2 · {cuisine} 요리사 실행 → Agent 3 교차검증")
         out = agents.run_recipe(cuisine, fridge_report)
         # '적합한 레시피 없음'은 캐시하지 않음 -> 다시 클릭하면 재시도 가능
         if out.strip().startswith(agents.NO_RECIPE):
@@ -129,7 +129,7 @@ def _shopping(mode: str, cuisine: str | None) -> tuple[str, bool]:
     if not cached:
         fridge_report = _fridge()
         if mode == "direct":
-            print("\n[agent] 장보기 관리사 실행 → 바로 장보기 (현 재고 보충)")
+            print("\n[agent] Agent 4 · 장보기 관리사 실행 → 바로 장보기 (현 재고 보충)")
             _state["shopping"][key] = agents.run_shopping(
                 "direct", fridge_report
             )
@@ -137,7 +137,7 @@ def _shopping(mode: str, cuisine: str | None) -> tuple[str, bool]:
             b, _ = _recipe(cuisine)
             if b.strip().startswith(agents.NO_RECIPE):
                 raise ValueError(f"{cuisine} 레시피가 없어 요리 후 장보기를 만들 수 없습니다.")
-            print(f"\n[agent] 장보기 관리사 실행 → 요리 후 장보기 (소진 재료 보충·{cuisine})")
+            print(f"\n[agent] Agent 4 · 장보기 관리사 실행 → 요리 후 장보기 (소진 재료 보충·{cuisine})")
             _state["shopping"][key] = agents.run_shopping(
                 "recipe", fridge_report, b
             )
@@ -226,7 +226,7 @@ def main():
     else:
         _load_saved()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    url = f"http://localhost:{PORT}/?v=6"
+    url = f"http://localhost:{PORT}/?v=7"
     print(f"\n냉장고를 부탁해 AX 서버 시작: {url}  (종료: Ctrl+C)")
     threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

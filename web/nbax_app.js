@@ -10,7 +10,7 @@
   "use strict";
 
   const CUISINES = ["한식", "중식", "양식", "일식"];
-  const PIPELINE_VERSION = "agent-context-v6";
+  const PIPELINE_VERSION = "agent-context-v7";
   const $ = (id) => document.getElementById(id);
   const LIVE = location.protocol === "http:" || location.protocol === "https:";
   const HAS_CURRENT_DATA =
@@ -243,7 +243,7 @@
     renderFridgeInventory(DATA.csv);
   } else if (LIVE) {
     renderFridgeInventory("");
-    fetch("/nbax_fridge.csv?v=6", { cache: "no-store" })
+    fetch("/nbax_fridge.csv?v=7", { cache: "no-store" })
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
@@ -265,7 +265,7 @@
   function showRecipe(cuisine, md) {
     const none = md.trim().startsWith(NO_RECIPE);
     $("recipe-title").innerHTML =
-      `${cuisine} 요리사의 ${none ? "답변" : "레시피"} <span class="badge">Agent 2 · 교차검증</span>`;
+      `${cuisine} 요리사의 ${none ? "답변" : "레시피"} <span class="badge">Agent 2 생성 · Agent 3 검증</span>`;
     $("recipe-body").innerHTML = none
       ? `<div class="empty">현재 재고로는 ${cuisine} 요리를 억지로 만들지 않았어요. ` +
         `홈으로 돌아가 다른 타입을 선택해 보세요.</div>` + renderMd(md)
@@ -274,7 +274,7 @@
     go("recipe");
   }
   function showShopping(title, desc, md) {
-    $("shopping-title").innerHTML = `${title} <span class="badge">Agent 3 · ReAct</span>`;
+    $("shopping-title").innerHTML = `${title} <span class="badge">Agent 4 · ReAct</span>`;
     $("shopping-desc").textContent = desc;
     $("shopping-body").innerHTML = renderShopping(md);
     go("shopping");
@@ -282,8 +282,11 @@
 
   // ---------- 홈 → 레시피 ----------
   function genRecipe(c) {
+    const recipeStatus = DATA.recipes[c]
+      ? `${c} 레시피를 불러오는 중...`
+      : `Agent 2 ${c} 요리사가 레시피를 작성하고 Agent 3 검증자가 확인하는 중...`;
     task(
-      `${c} 요리사가 레시피를 ${DATA.recipes[c] ? "불러오는" : "작성하는"} 중...`,
+      recipeStatus,
       async () => {
         const r = await api("/api/recipe", { cuisine: c });
         // '적합한 레시피 없음'은 캐시하지 않음 -> 다시 누르면 재시도
@@ -310,7 +313,7 @@
       return;
     }
     task(
-      "장보기 관리사가 요리 후 남은 재고를 확인하는 중...",
+      "Agent 4 장보기 관리사가 요리 후 남은 재고를 확인하는 중...",
       async () => {
         const r = await api("/api/shopping", { mode: "recipe", cuisine: c });
         DATA.shopping[key] = r.shopping;
@@ -328,7 +331,7 @@
       return;
     }
     task(
-      "장보기 관리사가 냉장고 재고를 확인하는 중...",
+      "Agent 4 장보기 관리사가 냉장고 재고를 확인하는 중...",
       async () => {
         const r = await api("/api/shopping", { mode: "direct" });
         DATA.shopping["direct"] = r.shopping;
@@ -358,7 +361,7 @@
       applyBrief(DATA.fridge_report);
     } else if (LIVE) {
       box.innerHTML =
-        '<div class="inline-loading"><div class="spinner"></div>냉장고 관리사가 임박 재료를 확인하는 중...</div>';
+        '<div class="inline-loading"><div class="spinner"></div>Agent 1 냉장고 관리사가 임박 재료를 확인하는 중...</div>';
       api("/api/fridge", {}).then(r => {
         DATA.fridge_report = r.fridge_report;
         DATA.csv = r.csv;
