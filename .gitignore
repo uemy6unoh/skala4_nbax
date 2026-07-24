@@ -1,0 +1,16 @@
+# API keys and local environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+prompt/
+
+# Local artifacts
+.DS_Store
+tmp/
+web/nbax_data.js

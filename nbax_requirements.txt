@@ -1,0 +1,2 @@
+crewai[openai]>=1.15,<2.0   # CrewAI + OpenAI LLM 연동
+python-dotenv>=1.0     # .env 파일에서 API Key 로드

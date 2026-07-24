@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>냉장고를 부탁해 AX</title>
+<link rel="stylesheet" href="nbax_style.css?v=6">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ========== 1. 홈 ========== -->
+  <section class="view on" id="view-home">
+    <div class="home-hero">
+      <img class="logo" src="nbax_logo.png" alt="냉장고를 부탁해 AX"
+           onerror="this.outerHTML='<span class=&quot;logo-fallback&quot;>냉장고를<br>부탁해 <small>AX</small></span>'">
+      <p class="tag">CrewAI 4-에이전트 · 냉장고 관리사 → 요리사 ⇄ 요리 검증관 → 장보기 관리사</p>
+      <p class="today" id="today"></p>
+    </div>
+
+    <!-- 브리핑(왼쪽) + 타입 선택(오른쪽) 수평 배치 -->
+    <div class="home-grid">
+      <div class="card">
+        <h1 style="font-size:17px">🍴 오늘의 냉장고 브리핑 <span class="badge">Agent 1 · 자동 실행</span></h1>
+        <p class="desc">마감 임박 재료를 확인하고 요리 타입을 추천합니다</p>
+        <div class="md" id="agent-brief"></div>
+      </div>
+
+      <div class="card">
+        <h1 style="font-size:17px">🍳 요리 타입 선택</h1>
+        <p class="desc">추천 타입(⭐)이 자동 선택됩니다 · 변경 가능합니다</p>
+        <div class="chips" id="cuisine-chips"></div>
+        <button class="btn" id="btn-recipe">🍳 레시피 생성</button>
+        <p class="or">— 또는 —</p>
+        <button class="btn ghost" id="btn-direct">🛒 바로 장보기 (현 재고 보충)</button>
+      </div>
+    </div>
+
+    <div class="card fridge-card">
+      <h1 style="font-size:17px">🧊 전체 냉장고</h1>
+      <p class="desc">현재 재고 상태입니다. 아래로 스크롤해 전체 목록을 확인하세요</p>
+      <div class="fridge-grid" id="fridge-grid"></div>
+    </div>
+  </section>
+
+  <!-- ========== 2. 레시피 페이지 ========== -->
+  <section class="view" id="view-recipe">
+    <div class="topbar">
+      <button class="back" data-go="home">← 홈으로</button>
+      <span class="where">홈 · <b>레시피</b> · 장보기</span>
+    </div>
+    <div class="card">
+      <h1 id="recipe-title">레시피 <span class="badge">Agent 2 · 교차검증</span></h1>
+      <p class="desc">유통기한 임박 재료를 최대한 활용한 레시피입니다.</p>
+      <div class="md" id="recipe-body"></div>
+      <button class="btn" id="btn-shop-recipe" style="margin-top:22px">🛒 요리 확정 </button>
+    </div>
+  </section>
+
+  <!-- ========== 3. 장보기 페이지 ========== -->
+  <section class="view" id="view-shopping">
+    <div class="topbar">
+      <button class="back" data-go="home">← 홈으로</button>
+      <span class="where">홈 · 레시피 · <b>장보기</b></span>
+    </div>
+    <div class="card">
+      <h1 id="shopping-title">장보기 <span class="badge">Agent 3 · ReAct</span></h1>
+      <p class="desc" id="shopping-desc"></p>
+      <div class="md" id="shopping-body"></div>
+    </div>
+  </section>
+
+  <footer id="meta"></footer>
+</div>
+
+<!-- 로딩 오버레이 -->
+<div id="loading"><div class="spinner"></div><p id="loading-msg">불러오는 중...</p></div>
+
+<script src="nbax_data.js?v=6"></script>
+<script src="nbax_app.js?v=6"></script>
+</body>
+</html>
