@@ -61,7 +61,8 @@ def _current_csv() -> str:
 
 def _load_saved():
     """이전 실행(nbax_run.py 포함)의 nbax_data.js를 캐시로 불러온다.
-    CSV 내용이 바뀌었으면 무효 처리."""
+    CSV 내용이 바뀌었으면 무효 처리. v8 -> v9에서는 웹 검색 검증을
+    다시 수행해야 하므로 레시피 계열만 비우고 Agent 1 결과는 보존한다."""
     if not DATA_JS.exists():
         return
     try:
@@ -69,11 +70,24 @@ def _load_saved():
         d = json.loads(text[text.index("{"): text.rindex("}") + 1].replace("<\\/", "</"))
     except (ValueError, json.JSONDecodeError):
         return
-    if (
-        d.get("csv") != _current_csv()
-        or d.get("pipeline_version") != agents.PIPELINE_VERSION
-    ):
-        print("[cache] CSV 또는 파이프라인이 변경되어 이전 결과를 무시합니다.")
+    if d.get("csv") != _current_csv():
+        print("[cache] CSV가 변경되어 이전 결과를 무시합니다.")
+        return
+    saved_version = d.get("pipeline_version")
+    if saved_version == "agent-context-v8" and agents.PIPELINE_VERSION == "agent-context-v9":
+        _state["fridge"] = d.get("fridge_report")
+        _state["recipes"] = {}
+        _state["shopping"] = {
+            key: value
+            for key, value in d.get("shopping", {}).items()
+            if key.startswith("direct:")
+        }
+        _save()
+        print("[cache] v9 마이그레이션: Agent 1·바로 장보기는 보존하고 "
+              "레시피·요리 후 장보기만 비웠습니다.")
+        return
+    if saved_version != agents.PIPELINE_VERSION:
+        print("[cache] 파이프라인이 변경되어 이전 결과를 무시합니다.")
         return
     _state["fridge"] = d.get("fridge_report")
     _state["recipes"] = d.get("recipes", {})

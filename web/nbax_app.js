@@ -20,7 +20,7 @@
     "coupang": "쿠팡",
     "kurly": "컬리",
   };
-  const PIPELINE_VERSION = "agent-context-v8";
+  const PIPELINE_VERSION = "agent-context-v9";
   const $ = (id) => document.getElementById(id);
   const LIVE = location.protocol === "http:" || location.protocol === "https:";
   const HAS_CURRENT_DATA =

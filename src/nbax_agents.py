@@ -76,7 +76,7 @@ RETAILERS = {
     },
 }
 NO_RECIPE = "적합한 레시피 없음"  # 요리사가 검증 통과 후보가 없을 때 첫 줄에 쓰는 고정 문구
-PIPELINE_VERSION = "agent-context-v8"
+PIPELINE_VERSION = "agent-context-v9"
 
 CUISINE_IDENTITY = {
     "한식": "찌개, 전골, 제육, 불고기, 전, 비빔밥",
@@ -228,17 +228,20 @@ def run_fridge_report() -> str:
 # ------------------------------------------------------------
 def run_recipe(cuisine: str, fridge_report: str) -> str:
     """Agent 1의 결과 A를 컨텍스트로 받아 레시피 B를 생성한다."""
+    from nbax_agent2 import create_recipe
+    from nbax_agent3 import verify_recipe
+
     if cuisine not in CUISINES:
         raise ValueError(f"cuisine은 {CUISINES} 중 하나여야 합니다: {cuisine}")
     if not fridge_report or not fridge_report.strip():
         raise ValueError("Agent 1의 냉장고 브리핑(A)이 필요합니다.")
     feedback = None
     for _ in range(2):  # 최초 시도 + 탈락 시 1회 재시도
-        recipe = _cook(cuisine, fridge_report, feedback)
+        recipe = create_recipe(cuisine, fridge_report, feedback)
         if recipe.strip().startswith(NO_RECIPE):
             return recipe
         print(f"[Agent 3] {cuisine} 레시피 교차검증 실행")
-        ok, reason = _verify_recipe(cuisine, fridge_report, recipe)
+        ok, reason = verify_recipe(cuisine, fridge_report, recipe)
         if ok:
             return recipe
         print(f"[Agent 3] 교차검증 탈락:\n{reason}")
@@ -249,102 +252,6 @@ def run_recipe(cuisine: str, fridge_report: str) -> str:
         )
     return (f"{NO_RECIPE}\n\n교차검증을 통과한 {cuisine} 레시피를 만들지 못했습니다. "
             "홈의 추천 타입을 참고해 주세요.")
-
-
-def _cook(cuisine: str, fridge_report: str, feedback: str | None = None) -> str:
-    # 선택한 타입에 따라 요리사 에이전트의 role이 바뀜
-    fridge_context = _completed_context_task(
-        "앞 단계 결과 A", fridge_report, "냉장고 관리사"
-    )
-    agent = Agent(
-        role=f"{cuisine} 요리사",
-        goal=f"임박 재료를 자연스럽게 활용한 {cuisine} 레시피 1개를 제안한다.",
-        backstory=(
-            f"당신은 20년 경력의 {cuisine} 전문 요리사입니다. "
-            "가정식과 퓨전에도 열려 있지만 선택한 요리 타입의 특징은 분명히 살립니다. "
-            "냉장고 재고 안에서 임박 재료를 억지스럽지 않게 활용합니다. "
-            "모든 결과물은 한국어로 작성합니다."
-        ),
-        llm=llm,
-        allow_delegation=False,
-        verbose=True,
-    )
-    task = Task(
-        description=(
-            (f"[재시도] {feedback}\n\n" if feedback else "") +
-            "context의 A와 아래 원본 재고를 바탕으로 레시피를 작성하세요. "
-            "A의 추천 타입보다 사용자가 선택한 타입을 우선합니다.\n\n"
-            f"[원본 재고 · D-day 계산됨]\n{load_fridge_text()}\n\n"
-            f"1. {cuisine} 대표 계열({CUISINE_IDENTITY[cuisine]})을 참고해 "
-            "메뉴명만 봐도 타입 정체성이 느껴지는 요리 또는 퓨전을 고릅니다. "
-            "'재료명+볶음/조림'처럼 일반적인 이름만 붙이지 마세요.\n"
-            "2. D-0~D-5 재료를 최소 1개, 어울리면 2개 이상 사용합니다. "
-            "모든 임박 재료를 억지로 넣을 필요는 없습니다.\n"
-            "3. 유통기한 지난 재료는 금지합니다. 재고 재료만 쓰되 기본 조미료는 허용합니다.\n"
-            "4. 형식: '# 요리 이름' → '## 재료'(임박 재료엔 '(임박)') → "
-            "'## 조리법' 5~7줄 번호 목록(재료 양·불 세기·시간 포함).\n"
-            f"마땅한 {cuisine} 요리가 없으면 첫 줄에 '{NO_RECIPE}'만 쓰고 "
-            "이유와 어울리는 타입을 제안하세요."
-        ),
-        expected_output=(
-            f"{cuisine} 레시피(이름·재료·5~7줄 조리법) 또는 '{NO_RECIPE}' 사유 (한국어 마크다운)"
-        ),
-        agent=agent,
-        context=[fridge_context],
-    )
-    return _run_single(agent, task)
-
-
-def _verify_recipe(
-    cuisine: str,
-    fridge_report: str,
-    recipe_md: str,
-) -> tuple[bool, str]:
-    imminent = imminent_ingredients()
-    if imminent and not any(name in recipe_md for name in imminent):
-        return False, "D-0~D-5 임박 재료를 최소 1개 사용해야 합니다."
-
-    fridge_context = _completed_context_task(
-        "앞 단계 결과 A", fridge_report, "냉장고 관리사"
-    )
-    recipe_context = _completed_context_task(
-        "앞 단계 결과 B", recipe_md, f"{cuisine} 요리사"
-    )
-    agent = Agent(
-        role="레시피 교차검증자",
-        goal="레시피의 타입 특징, 임박 재료 활용, 조리 가능성을 검증한다.",
-        backstory=(
-            "당신은 실용적인 요리 연구가입니다. 선택 타입의 특징이 보이면 "
-            "가정식·퓨전·재료 대체를 허용하고, 명백히 다른 타입이나 성립하지 않는 요리만 탈락시킵니다. "
-            "모든 결과물은 한국어로 작성합니다."
-        ),
-        llm=llm,
-        allow_delegation=False,
-        verbose=True,
-    )
-    task = Task(
-        description=(
-            f"context의 A와 B를 바탕으로 사용자가 선택한 {cuisine} 레시피를 검증하세요.\n\n"
-            f"[원본 재고 · D-day 계산됨]\n{load_fridge_text()}\n\n"
-            f"[{cuisine} 대표 계열]\n{CUISINE_IDENTITY[cuisine]}\n\n"
-            "판정 기준:\n"
-            "- 통과: 대표 요리 계열과 조리 특징이 분명함\n"
-            "- 보완허용: 퓨전이지만 메뉴명·맛/양념·조리법 중 2가지 이상에서 타입 특징이 보임\n"
-            "- 탈락: 단순 '재료명+볶음/조림' 수준이거나 타입 특징이 없음, "
-            "임박 재료 미사용, 폐기 재료 사용, 조리 불가능\n\n"
-            "다음 두 줄만 출력하세요.\n"
-            "판정: 통과/보완허용/탈락 중 하나\n"
-            "사유: 한 문장"
-        ),
-        expected_output="'판정: X'와 '사유: 한 문장' 두 줄",
-        agent=agent,
-        context=[fridge_context, recipe_context],
-    )
-    out = _run_single(agent, task)
-    decision = re.search(r"판정\s*[:：]\s*(통과|보완\s*허용|보완허용|탈락)", out)
-    if decision and decision.group(1).replace(" ", "") in ("통과", "보완허용"):
-        return True, ""
-    return False, out.strip() or "검증 형식을 확인할 수 없습니다."
 
 
 # ------------------------------------------------------------
