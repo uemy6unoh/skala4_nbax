@@ -101,6 +101,52 @@ body {
   display: flex;
   flex-direction: column;
 }
+.fridge-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 12px;
+}
+.fridge-search { min-width: 0; flex: 1; }
+.fridge-search input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--card-line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #12141a;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.fridge-search input:focus {
+  border-color: var(--sub);
+  box-shadow: 0 0 0 2px rgba(154, 161, 173, .12);
+}
+.fridge-search input::placeholder { color: #656c78; }
+.fridge-filters {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 5px;
+}
+.fridge-filters button {
+  height: 34px;
+  border: 1px solid var(--card-line);
+  border-radius: 8px;
+  padding: 0 8px;
+  background: #12141a;
+  color: var(--sub);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.fridge-filters button.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.fridge-filters span { font-variant-numeric: tabular-nums; }
 .fridge-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -169,6 +215,8 @@ body {
 }
 @media (max-width: 460px) {
   .fridge-grid { grid-template-columns: 1fr; }
+  .fridge-toolbar { align-items: stretch; flex-direction: column; }
+  .fridge-filters { display: grid; grid-template-columns: repeat(3, 1fr); }
 }
 
 .chips {
@@ -227,6 +275,13 @@ body {
   margin-top: 24px;
   padding-top: 18px;
   border-top: 1px solid var(--card-line);
+}
+.selection-help {
+  min-height: 18px;
+  margin-top: 7px;
+  color: var(--sub);
+  font-size: 11.5px;
+  text-align: center;
 }
 
 .btn {
@@ -292,6 +347,34 @@ body {
   display: inline-block; font-size: 11px; font-weight: 800;
   color: var(--accent-ink); background: var(--accent);
   border-radius: 6px; padding: 2px 9px; margin-left: 8px; vertical-align: 2px;
+}
+.recipe-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.mini-action {
+  border: 1px solid var(--card-line);
+  border-radius: 9px;
+  padding: 8px 12px;
+  background: #12141a;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mini-action:hover { border-color: var(--sub); }
+.mini-action.done { color: #9ee6b0; border-color: rgba(158, 230, 176, .45); }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ---------------- 마크다운 ---------------- */

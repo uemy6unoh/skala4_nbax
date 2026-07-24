@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 import webbrowser
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 SRC_DIR = Path(__file__).resolve().parent
@@ -91,6 +91,7 @@ def main():
         shopping = {**old.get("shopping", {}), **shopping}
     data = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "inventory_date": date.today().isoformat(),
         "model": agents.model_name,
         "pipeline_version": agents.PIPELINE_VERSION,
         "csv": agents.CSV_PATH.read_text(encoding="utf-8"),
@@ -117,6 +118,8 @@ def _load_old_data(pipeline_version: str) -> dict | None:
         end = text.rindex("}")
         data = json.loads(text[start:end + 1].replace("<\\/", "</"))
         if data.get("pipeline_version") != pipeline_version:
+            return None
+        if data.get("inventory_date") != date.today().isoformat():
             return None
         return data
     except (ValueError, json.JSONDecodeError):

@@ -20,11 +20,19 @@
     "coupang": "쿠팡",
     "kurly": "컬리",
   };
-  const PIPELINE_VERSION = "agent-context-v9";
+  const PIPELINE_VERSION = "agent-context-v10";
   const $ = (id) => document.getElementById(id);
   const LIVE = location.protocol === "http:" || location.protocol === "https:";
+  const now = new Date();
+  const INVENTORY_DATE = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
   const HAS_CURRENT_DATA =
-    !!window.NBAX_DATA && window.NBAX_DATA.pipeline_version === PIPELINE_VERSION;
+    !!window.NBAX_DATA &&
+    window.NBAX_DATA.pipeline_version === PIPELINE_VERSION &&
+    window.NBAX_DATA.inventory_date === INVENTORY_DATE;
   const DATA = HAS_CURRENT_DATA
     ? window.NBAX_DATA
     : { recipes: {}, shopping: {} };
@@ -146,15 +154,47 @@
     return rows;
   }
 
-  function renderFridgeInventory(csvText) {
+  let fridgeItems = [];
+  let fridgeFilter = "all";
+  let fridgeQuery = "";
+
+  function updateFridgeInventory() {
     const box = $("fridge-grid");
+    const visible = fridgeItems.filter(item => {
+      const matchesState = fridgeFilter === "all" || item.status === fridgeFilter;
+      const haystack = `${item.name} ${item.category}`.toLocaleLowerCase("ko-KR");
+      return matchesState && haystack.includes(fridgeQuery);
+    });
+
+    if (!visible.length) {
+      const message = fridgeItems.length
+        ? "조건에 맞는 재료가 없습니다."
+        : "재고 데이터를 불러오는 중...";
+      box.innerHTML = `<div class="fridge-empty">${message}</div>`;
+      return;
+    }
+
+    box.innerHTML = visible.map(item => {
+      const stateClass = item.status === "expired"
+        ? " expired"
+        : item.status === "imminent" ? " imminent" : "";
+      return `<div class="fridge-item${stateClass}">` +
+        `<div class="fridge-item-main"><strong>${esc(item.name)}</strong><b>${esc(item.amount)}</b></div>` +
+        `<small>${esc(item.category)} · ${esc(item.expiry)} · ${item.state}</small>` +
+      `</div>`;
+    }).join("");
+  }
+
+  function renderFridgeInventory(csvText) {
     if (!csvText) {
-      box.innerHTML = '<div class="fridge-empty">재고 데이터를 불러오는 중...</div>';
+      fridgeItems = [];
+      updateFridgeInventory();
       return;
     }
     const rows = parseCsv(csvText);
     if (rows.length < 2) {
-      box.innerHTML = '<div class="fridge-empty">표시할 재고가 없습니다.</div>';
+      fridgeItems = [];
+      $("fridge-grid").innerHTML = '<div class="fridge-empty">표시할 재고가 없습니다.</div>';
       return;
     }
     const header = rows[0];
@@ -170,21 +210,43 @@
       return safeA - safeB;
     });
 
-    box.innerHTML = inventoryRows.map(row => {
-      const name = row[index("재료명")] || "";
-      const category = row[index("카테고리")] || "";
-      const amount = `${row[index("수량")] || ""}${row[index("단위")] || ""}`;
+    fridgeItems = inventoryRows.map(row => {
       const expiry = row[index("유통기한")] || "";
       const expiryDate = new Date(`${expiry}T00:00:00`);
       const days = Math.round((expiryDate - today) / 86400000);
-      const stateClass = days < 0 ? " expired" : days <= 5 ? " imminent" : "";
-      const state = days < 0 ? `D+${Math.abs(days)}` : `D-${days}`;
-      return `<div class="fridge-item${stateClass}">` +
-        `<div class="fridge-item-main"><strong>${esc(name)}</strong><b>${esc(amount)}</b></div>` +
-        `<small>${esc(category)} · ${esc(expiry)} · ${state}</small>` +
-      `</div>`;
-    }).join("");
+      return {
+        name: row[index("재료명")] || "",
+        category: row[index("카테고리")] || "",
+        amount: `${row[index("수량")] || ""}${row[index("단위")] || ""}`,
+        expiry,
+        state: days < 0 ? `D+${Math.abs(days)}` : `D-${days}`,
+        status: days < 0 ? "expired" : days <= 5 ? "imminent" : "normal",
+      };
+    });
+
+    $("fridge-count-all").textContent = fridgeItems.length;
+    $("fridge-count-imminent").textContent =
+      fridgeItems.filter(item => item.status === "imminent").length;
+    $("fridge-count-expired").textContent =
+      fridgeItems.filter(item => item.status === "expired").length;
+    updateFridgeInventory();
   }
+
+  $("fridge-search").addEventListener("input", event => {
+    fridgeQuery = event.target.value.trim().toLocaleLowerCase("ko-KR");
+    updateFridgeInventory();
+  });
+  document.querySelectorAll("[data-fridge-filter]").forEach(button => {
+    button.addEventListener("click", () => {
+      fridgeFilter = button.dataset.fridgeFilter;
+      document.querySelectorAll("[data-fridge-filter]").forEach(filterButton => {
+        const active = filterButton === button;
+        filterButton.classList.toggle("on", active);
+        filterButton.setAttribute("aria-pressed", String(active));
+      });
+      updateFridgeInventory();
+    });
+  });
 
   // ---------- 뷰 전환 / 로딩 ----------
   function go(view) {
@@ -231,21 +293,30 @@
 
   function pick(c) {
     if (!chipEls[c] || chipEls[c].disabled) return;
-    chips.querySelectorAll("button").forEach(x => x.classList.remove("on"));
+    chips.querySelectorAll("button").forEach(x => {
+      x.classList.remove("on");
+      x.setAttribute("aria-pressed", "false");
+    });
     chipEls[c].classList.add("on");
+    chipEls[c].setAttribute("aria-pressed", "true");
     selected = c;
   }
 
   CUISINES.forEach(c => {
     const b = document.createElement("button");
     b.textContent = `${CUISINE_EMOJI[c]} ${c}`;
+    b.setAttribute("aria-pressed", "false");
     const usable = LIVE || !!DATA.recipes[c]; // 라이브 모드는 전부 선택 가능
     if (!usable) {
       b.disabled = true;
       b.title = `nbax_run.py --cuisine ${c} 로 생성하거나 nbax_server.py로 실행하세요`;
     } else {
       b.addEventListener("click", () => { userPicked = true; pick(c); });
-      if (!selected) { selected = c; b.classList.add("on"); } // 기본 선택 (추천 오면 교체)
+      if (!selected) {
+        selected = c;
+        b.classList.add("on");
+        b.setAttribute("aria-pressed", "true");
+      } // 기본 선택 (추천 오면 교체)
     }
     chipEls[c] = b;
     chips.appendChild(b);
@@ -259,7 +330,9 @@
     if (!RETAILERS[retailer]) return;
     selectedRetailer = retailer;
     retailerButtons.forEach(button => {
-      button.classList.toggle("on", button.dataset.retailer === retailer);
+      const active = button.dataset.retailer === retailer;
+      button.classList.toggle("on", active);
+      button.setAttribute("aria-pressed", String(active));
     });
     updateShoppingButtons();
   }
@@ -272,6 +345,11 @@
     const required = !selectedRetailer;
     $("btn-direct").disabled = required;
     $("btn-shop-recipe").disabled = required;
+    const helpText = required
+      ? "장보기 플랫폼을 먼저 선택해 주세요."
+      : `${RETAILERS[selectedRetailer]}에서 보충 재료를 찾습니다.`;
+    $("home-retailer-help").textContent = helpText;
+    $("recipe-retailer-help").textContent = helpText;
   }
 
   updateShoppingButtons();
@@ -305,9 +383,11 @@
   }
 
   const NO_RECIPE = "적합한 레시피 없음"; // 요리사의 정직한 실패 문구 (nbax_agents.py와 동일)
+  let currentRecipeMd = "";
 
   function showRecipe(cuisine, md) {
     const none = md.trim().startsWith(NO_RECIPE);
+    currentRecipeMd = none ? "" : md;
     $("recipe-title").innerHTML =
       `${cuisine} 요리사의 ${none ? "답변" : "레시피"} <span class="badge">Agent 2 생성 · Agent 3 검증</span>`;
     $("recipe-body").innerHTML = none
@@ -315,8 +395,37 @@
         `홈으로 돌아가 다른 타입을 선택해 보세요.</div>` + renderMd(md)
       : renderMd(md);
     $("recipe-shop-controls").hidden = none; // 요리를 안 했으니 장보기 선택과 버튼 숨김
+    $("recipe-actions").hidden = none;
     go("recipe");
   }
+
+  async function copyRecipe() {
+    if (!currentRecipeMd) return;
+    const button = $("btn-copy-recipe");
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(currentRecipeMd);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = currentRecipeMd;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        if (!document.execCommand("copy")) throw new Error("copy command failed");
+        textarea.remove();
+      }
+      button.textContent = "✓ 복사 완료";
+      button.classList.add("done");
+      setTimeout(() => {
+        button.textContent = "📋 레시피 복사";
+        button.classList.remove("done");
+      }, 1600);
+    } catch (error) {
+      alert("레시피를 복사하지 못했습니다: " + error.message);
+    }
+  }
+  $("btn-copy-recipe").addEventListener("click", copyRecipe);
   function showShopping(title, desc, md, retailer) {
     $("shopping-title").innerHTML = `${title} <span class="badge">Agent 4 · ReAct</span>`;
     $("shopping-desc").textContent = desc;

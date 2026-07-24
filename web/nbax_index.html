@@ -42,6 +42,7 @@
                 <img src="assets/retailers/kurly-logo.png" alt="컬리">
               </button>
             </div>
+            <p class="selection-help" id="home-retailer-help">장보기 플랫폼을 먼저 선택해 주세요.</p>
           </div>
           <button class="btn ghost" id="btn-direct">🛒 바로 장보기 (현 재고 보충)</button>
         </div>
@@ -50,7 +51,24 @@
       <!-- 우측: 전체 냉장고. 좁은 화면에서는 중앙 카드 아래로 이동 -->
       <div class="card fridge-card">
         <h1 style="font-size:17px">🧊 전체 냉장고</h1>
-        <p class="desc">유통기한이 가까운 순서입니다. 아래로 스크롤해 전체 목록을 확인하세요</p>
+        <p class="desc">유통기한이 가까운 순서입니다. 검색하거나 상태별로 빠르게 확인하세요</p>
+        <div class="fridge-toolbar">
+          <label class="fridge-search">
+            <span class="sr-only">재료 검색</span>
+            <input id="fridge-search" type="search" placeholder="재료명·카테고리 검색" autocomplete="off">
+          </label>
+          <div class="fridge-filters" aria-label="재고 상태 필터">
+            <button type="button" class="on" data-fridge-filter="all" aria-pressed="true">
+              전체 <span id="fridge-count-all">0</span>
+            </button>
+            <button type="button" data-fridge-filter="imminent" aria-pressed="false">
+              임박 <span id="fridge-count-imminent">0</span>
+            </button>
+            <button type="button" data-fridge-filter="expired" aria-pressed="false">
+              폐기 <span id="fridge-count-expired">0</span>
+            </button>
+          </div>
+        </div>
         <div class="fridge-grid" id="fridge-grid"></div>
       </div>
     </div>
@@ -66,6 +84,9 @@
       <h1 id="recipe-title">레시피 <span class="badge">Agent 2 생성 · Agent 3 검증</span></h1>
       <p class="desc">유통기한 임박 재료를 최대한 활용한 레시피입니다.</p>
       <div class="md" id="recipe-body"></div>
+      <div class="recipe-actions" id="recipe-actions">
+        <button type="button" class="mini-action" id="btn-copy-recipe">📋 레시피 복사</button>
+      </div>
       <div id="recipe-shop-controls">
         <div class="retailer-picker recipe-retailer-picker" aria-label="장보기 플랫폼 선택">
           <div class="retailer-chips">
@@ -77,6 +98,7 @@
             </button>
           </div>
         </div>
+        <p class="selection-help" id="recipe-retailer-help">장보기 플랫폼을 먼저 선택해 주세요.</p>
         <button class="btn" id="btn-shop-recipe">🛒 요리 확정! 장보러 가기</button>
       </div>
     </div>
@@ -101,7 +123,7 @@
 <!-- 로딩 오버레이 -->
 <div id="loading"><div class="spinner"></div><p id="loading-msg">불러오는 중...</p></div>
 
-<script src="nbax_data.js?v=18"></script>
-<script src="nbax_app.js?v=18"></script>
+<script src="nbax_data.js?v=20"></script>
+<script src="nbax_app.js?v=20"></script>
 </body>
 </html>

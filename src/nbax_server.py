@@ -17,7 +17,7 @@ import argparse
 import json
 import threading
 import webbrowser
-from datetime import datetime
+from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -61,8 +61,7 @@ def _current_csv() -> str:
 
 def _load_saved():
     """이전 실행(nbax_run.py 포함)의 nbax_data.js를 캐시로 불러온다.
-    CSV 내용이 바뀌었으면 무효 처리. v8 -> v9에서는 웹 검색 검증을
-    다시 수행해야 하므로 레시피 계열만 비우고 Agent 1 결과는 보존한다."""
+    CSV 내용, 기준일, 파이프라인 버전이 바뀌었으면 무효 처리한다."""
     if not DATA_JS.exists():
         return
     try:
@@ -73,19 +72,10 @@ def _load_saved():
     if d.get("csv") != _current_csv():
         print("[cache] CSV가 변경되어 이전 결과를 무시합니다.")
         return
-    saved_version = d.get("pipeline_version")
-    if saved_version == "agent-context-v8" and agents.PIPELINE_VERSION == "agent-context-v9":
-        _state["fridge"] = d.get("fridge_report")
-        _state["recipes"] = {}
-        _state["shopping"] = {
-            key: value
-            for key, value in d.get("shopping", {}).items()
-            if key.startswith("direct:")
-        }
-        _save()
-        print("[cache] v9 마이그레이션: Agent 1·바로 장보기는 보존하고 "
-              "레시피·요리 후 장보기만 비웠습니다.")
+    if d.get("inventory_date") != date.today().isoformat():
+        print("[cache] 날짜가 변경되어 D-day 기반 이전 결과를 무시합니다.")
         return
+    saved_version = d.get("pipeline_version")
     if saved_version != agents.PIPELINE_VERSION:
         print("[cache] 파이프라인이 변경되어 이전 결과를 무시합니다.")
         return
@@ -99,6 +89,7 @@ def _load_saved():
 def _save():
     data = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "inventory_date": date.today().isoformat(),
         "model": agents.model_name,
         "pipeline_version": agents.PIPELINE_VERSION,
         "csv": _current_csv(),
