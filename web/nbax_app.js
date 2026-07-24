@@ -10,6 +10,12 @@
   "use strict";
 
   const CUISINES = ["한식", "중식", "양식", "일식"];
+  const CUISINE_EMOJI = {
+    "한식": "🍚",
+    "중식": "🍜",
+    "양식": "🍝",
+    "일식": "🍣",
+  };
   const PIPELINE_VERSION = "agent-context-v7";
   const $ = (id) => document.getElementById(id);
   const LIVE = location.protocol === "http:" || location.protocol === "https:";
@@ -150,8 +156,16 @@
     const index = name => header.indexOf(name);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const expiryIndex = index("유통기한");
+    const inventoryRows = rows.slice(1).sort((a, b) => {
+      const aTime = new Date(`${a[expiryIndex] || ""}T00:00:00`).getTime();
+      const bTime = new Date(`${b[expiryIndex] || ""}T00:00:00`).getTime();
+      const safeA = Number.isNaN(aTime) ? Number.POSITIVE_INFINITY : aTime;
+      const safeB = Number.isNaN(bTime) ? Number.POSITIVE_INFINITY : bTime;
+      return safeA - safeB;
+    });
 
-    box.innerHTML = rows.slice(1).map(row => {
+    box.innerHTML = inventoryRows.map(row => {
       const name = row[index("재료명")] || "";
       const category = row[index("카테고리")] || "";
       const amount = `${row[index("수량")] || ""}${row[index("단위")] || ""}`;
@@ -219,7 +233,7 @@
 
   CUISINES.forEach(c => {
     const b = document.createElement("button");
-    b.textContent = c;
+    b.textContent = `${CUISINE_EMOJI[c]} ${c}`;
     const usable = LIVE || !!DATA.recipes[c]; // 라이브 모드는 전부 선택 가능
     if (!usable) {
       b.disabled = true;
@@ -243,7 +257,7 @@
     renderFridgeInventory(DATA.csv);
   } else if (LIVE) {
     renderFridgeInventory("");
-    fetch("/nbax_fridge.csv?v=7", { cache: "no-store" })
+    fetch("/nbax_fridge.csv?v=13", { cache: "no-store" })
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
@@ -347,10 +361,19 @@
   function applyBrief(md) {
     const m = md.match(/추천타입\s*[:：]\s*(한식|중식|양식|일식)/);
     const display = md.replace(/\n?추천타입\s*[:：].*$/m, "").trim(); // 파싱용 줄은 화면에서 숨김
-    $("agent-brief").innerHTML = renderMd(display);
+    const expiredStart = display.search(/^##\s*🚫\s*폐기 대상.*$/m);
+    const imminentMd = expiredStart >= 0
+      ? display.slice(0, expiredStart).trim()
+      : display;
+    const expiredMd = expiredStart >= 0
+      ? display.slice(expiredStart).trim()
+      : "## 🚫 폐기 대상\n- 없음";
+    $("agent-brief").innerHTML =
+      `<div class="brief-pane">${renderMd(imminentMd)}</div>` +
+      `<div class="brief-pane expired-pane">${renderMd(expiredMd)}</div>`;
     if (m) {
       const c = m[1];
-      if (chipEls[c]) chipEls[c].textContent = `⭐ ${c}`;
+      if (chipEls[c]) chipEls[c].textContent = `⭐ ${CUISINE_EMOJI[c]} ${c}`;
       if (!userPicked) pick(c); // 사용자가 아직 안 골랐으면 추천 타입 자동 선택
     }
   }

@@ -226,7 +226,7 @@ def main():
     else:
         _load_saved()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    url = f"http://localhost:{PORT}/?v=7"
+    url = f"http://localhost:{PORT}/?v=13"
     print(f"\n냉장고를 부탁해 AX 서버 시작: {url}  (종료: Ctrl+C)")
     threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
